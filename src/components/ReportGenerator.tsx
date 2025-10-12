@@ -158,12 +158,6 @@ const ReportGenerator: React.FC = () => {
   };
 
   const exportToExcel = async () => {
-    // Vérifier que les filtres sont remplis
-    if (!filters.type || filters.type === 'all') {
-      alert('Veuillez sélectionner un type avant d\'exporter');
-      return;
-    }
-
     if (!filters.dateFrom) {
       alert('Veuillez sélectionner une date de début');
       return;
@@ -177,16 +171,13 @@ const ReportGenerator: React.FC = () => {
     try {
       let filteredData = [];
 
-      // Si le type est "Rapport", exporter directement toutes les données de la table rapport
-      if (filters.type === 'Rapport') {
-        // Récupérer toutes les données de la table rapport dans la plage de dates
+      if (filters.type === 'Rapport' || filters.type === 'all') {
         filteredData = await getFilteredDataForExport(
-          'all', // Tous les types pour obtenir toute la table rapport
+          'all',
           filters.dateFrom,
           filters.dateTo
         );
       } else {
-        // Récupérer les données filtrées par type spécifique
         filteredData = await getFilteredDataForExport(
           filters.type,
           filters.dateFrom,
@@ -199,7 +190,6 @@ const ReportGenerator: React.FC = () => {
         return;
       }
 
-      // Convertir les données rapport au format attendu par exportToXLSX
       const contractsForExport = filteredData.map(contract => ({
         id: contract.id.toString(),
         type: contract.type,
@@ -215,7 +205,8 @@ const ReportGenerator: React.FC = () => {
         createdAt: new Date(contract.created_at).getTime()
       }));
 
-      const filename = `rapport_${filters.type}_${filters.dateFrom}_${filters.dateTo}.xlsx`;
+      const typeLabel = filters.type === 'all' || filters.type === 'Rapport' ? 'tous_types' : filters.type;
+      const filename = `rapport_${typeLabel}_${filters.dateFrom}_${filters.dateTo}.xlsx`;
       exportToXLSX(contractsForExport, filename);
     } catch (error) {
       console.error('Erreur lors de l\'export:', error);
