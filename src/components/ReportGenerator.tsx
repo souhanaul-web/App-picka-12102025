@@ -169,21 +169,28 @@ const ReportGenerator: React.FC = () => {
     }
 
     try {
+      console.log('📊 Début de l\'export...');
+      console.log('Filtres:', filters);
+
       let filteredData = [];
 
       if (filters.type === 'Rapport' || filters.type === 'all') {
+        console.log('🔍 Export de tous les types depuis la table rapport');
         filteredData = await getFilteredDataForExport(
           'all',
           filters.dateFrom,
           filters.dateTo
         );
       } else {
+        console.log(`🔍 Export du type ${filters.type} depuis la table rapport`);
         filteredData = await getFilteredDataForExport(
           filters.type,
           filters.dateFrom,
           filters.dateTo
         );
       }
+
+      console.log('📦 Données récupérées:', filteredData.length, 'contrats');
 
       if (filteredData.length === 0) {
         alert('Aucune donnée à exporter avec les filtres sélectionnés');
@@ -196,6 +203,7 @@ const ReportGenerator: React.FC = () => {
         branch: contract.branche,
         contractNumber: contract.numero_contrat,
         premiumAmount: contract.prime,
+        montant: contract.montant,
         insuredName: contract.assure,
         paymentMode: contract.mode_paiement,
         paymentType: contract.type_paiement,
@@ -205,11 +213,17 @@ const ReportGenerator: React.FC = () => {
         createdAt: new Date(contract.created_at).getTime()
       }));
 
+      console.log('📝 Premier contrat formaté:', contractsForExport[0]);
+
       const typeLabel = filters.type === 'all' || filters.type === 'Rapport' ? 'tous_types' : filters.type;
       const filename = `rapport_${typeLabel}_${filters.dateFrom}_${filters.dateTo}.xlsx`;
+
+      console.log('💾 Export vers:', filename);
       exportToXLSX(contractsForExport, filename);
+
+      alert(`Export réussi: ${contractsForExport.length} contrats exportés vers ${filename}`);
     } catch (error) {
-      console.error('Erreur lors de l\'export:', error);
+      console.error('❌ Erreur lors de l\'export:', error);
       alert('Erreur lors de l\'export des données');
     }
   };
