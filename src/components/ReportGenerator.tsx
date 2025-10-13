@@ -158,6 +158,12 @@ const ReportGenerator: React.FC = () => {
   };
 
   const exportToExcel = async () => {
+    // Vérifier que les filtres sont remplis
+    if (!filters.type || filters.type === 'all') {
+      alert('Veuillez sélectionner un type avant d\'exporter');
+      return;
+    }
+
     if (!filters.dateFrom) {
       alert('Veuillez sélectionner une date de début');
       return;
@@ -169,20 +175,18 @@ const ReportGenerator: React.FC = () => {
     }
 
     try {
-      console.log('📊 Début de l\'export...');
-      console.log('Filtres:', filters);
-
       let filteredData = [];
 
-      if (filters.type === 'Rapport' || filters.type === 'all') {
-        console.log('🔍 Export de tous les types depuis la table rapport');
+      // Si le type est "Rapport", exporter directement toutes les données de la table rapport
+      if (filters.type === 'Rapport') {
+        // Récupérer toutes les données de la table rapport dans la plage de dates
         filteredData = await getFilteredDataForExport(
-          'all',
+          'all', // Tous les types pour obtenir toute la table rapport
           filters.dateFrom,
           filters.dateTo
         );
       } else {
-        console.log(`🔍 Export du type ${filters.type} depuis la table rapport`);
+        // Récupérer les données filtrées par type spécifique
         filteredData = await getFilteredDataForExport(
           filters.type,
           filters.dateFrom,
@@ -190,20 +194,18 @@ const ReportGenerator: React.FC = () => {
         );
       }
 
-      console.log('📦 Données récupérées:', filteredData.length, 'contrats');
-
       if (filteredData.length === 0) {
         alert('Aucune donnée à exporter avec les filtres sélectionnés');
         return;
       }
 
+      // Convertir les données rapport au format attendu par exportToXLSX
       const contractsForExport = filteredData.map(contract => ({
         id: contract.id.toString(),
         type: contract.type,
         branch: contract.branche,
         contractNumber: contract.numero_contrat,
         premiumAmount: contract.prime,
-        montant: contract.montant,
         insuredName: contract.assure,
         paymentMode: contract.mode_paiement,
         paymentType: contract.type_paiement,
@@ -213,17 +215,10 @@ const ReportGenerator: React.FC = () => {
         createdAt: new Date(contract.created_at).getTime()
       }));
 
-      console.log('📝 Premier contrat formaté:', contractsForExport[0]);
-
-      const typeLabel = filters.type === 'all' || filters.type === 'Rapport' ? 'tous_types' : filters.type;
-      const filename = `rapport_${typeLabel}_${filters.dateFrom}_${filters.dateTo}.xlsx`;
-
-      console.log('💾 Export vers:', filename);
+      const filename = `rapport_${filters.type}_${filters.dateFrom}_${filters.dateTo}.xlsx`;
       exportToXLSX(contractsForExport, filename);
-
-      alert(`Export réussi: ${contractsForExport.length} contrats exportés vers ${filename}`);
     } catch (error) {
-      console.error('❌ Erreur lors de l\'export:', error);
+      console.error('Erreur lors de l\'export:', error);
       alert('Erreur lors de l\'export des données');
     }
   };
