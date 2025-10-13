@@ -1,30 +1,4 @@
-import jsPDF from 'jspdf';
-import QRCode from 'qrcode';
-import { getRapportContracts } from './supabaseService';
-import { getSessionDate } from './auth';
-
-export interface SessionReport {
-  sessionDate: string;
-  username: string;
-  contracts: any[];
-  statistics: {
-    totalContracts: number;
-    totalMontant: number;
-    totalPrime: number;
-    totalCredit: number;
-    totalPrimeNette: number;
-    totalEspeces: number;
-    totalCheque: number;
-    totalCarteBancaire: number;
-    byPaymentMode: Record<string, number>;
-    byPaymentType: Record<string, number>;
-    byType: Record<string, number>;
-  };
-}
-
-export const generateSessionReport = async (username: string): Promise<SessionReport> => {
-  const sessionDate = getSessionDate();
-  console.log('📊 Génération du rapport de session pour:', username, 'Date:', sessionDate);
+port de session pour:', username, 'Date:', sessionDate);
 
   // Récupérer tous les contrats de la session (TOUS LES UTILISATEURS)
   const allContracts = await getRapportContracts();
