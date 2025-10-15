@@ -28,7 +28,24 @@ const CreditsList: React.FC = () => {
     try {
       setIsLoading(true);
       const data = await getCredits();
-      setCredits(data);
+      // S'assurer que les données sont bien formatées pour la table Liste_credits
+      const formattedData = data.map(credit => ({
+        id: credit.id,
+        numero_contrat: credit.numero_contrat,
+        assure: credit.assure,
+        branche: credit.branche,
+        prime: credit.prime || 0,
+        montant_credit: credit.montant_credit || 0,
+        paiement: credit.paiement || 0,
+        solde: credit.solde || 0,
+        date_paiement_prevue: credit.date_paiement_prevue,
+        date_paiement_effectif: credit.date_paiement_effectif,
+        statut: credit.statut || 'Non payé',
+        cree_par: credit.cree_par || 'Utilisateur',
+        created_at: credit.created_at,
+        updated_at: credit.updated_at
+      }));
+      setCredits(formattedData);
     } catch (error) {
       console.error('Erreur lors du chargement des crédits:', error);
     } finally {
@@ -39,6 +56,7 @@ const CreditsList: React.FC = () => {
   const getCreditsByMonth = (month: string) => {
     const [year, monthNum] = month.split('-').map(Number);
     return credits.filter(credit => {
+      if (!credit.created_at) return false;
       const creditDate = new Date(credit.created_at);
       return creditDate.getFullYear() === year && creditDate.getMonth() + 1 === monthNum;
     });
@@ -46,6 +64,7 @@ const CreditsList: React.FC = () => {
 
   const getCreditsDueIn7Days = () => {
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const nextWeek = new Date(today);
     nextWeek.setDate(today.getDate() + 7);
     
@@ -53,7 +72,21 @@ const CreditsList: React.FC = () => {
       if (!credit.date_paiement_prevue || credit.statut === 'Payé') return false;
       
       const dueDate = new Date(credit.date_paiement_prevue);
+      dueDate.setHours(0, 0, 0, 0);
       return dueDate >= today && dueDate <= nextWeek;
+    });
+  };
+
+  const getOverdueCredits = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return credits.filter(credit => {
+      if (!credit.date_paiement_prevue || credit.statut === 'Payé') return false;
+      
+      const dueDate = new Date(credit.date_paiement_prevue);
+      dueDate.setHours(0, 0, 0, 0);
+      return dueDate < today;
     });
   };
 
@@ -63,9 +96,14 @@ const CreditsList: React.FC = () => {
       : credits;
 
     filtered = filtered.filter(credit => {
-      const creditDate = new Date(credit.created_at);
+      const creditDate = credit.created_at ? new Date(credit.created_at) : new Date();
       const fromDate = filters.dateFrom ? new Date(filters.dateFrom) : new Date('1900-01-01');
       const toDate = filters.dateTo ? new Date(filters.dateTo) : new Date('2100-12-31');
+      
+      // Gérer les dates pour la comparaison
+      fromDate.setHours(0, 0, 0, 0);
+      toDate.setHours(23, 59, 59, 999);
+      creditDate.setHours(0, 0, 0, 0);
       
       return (
         (filters.statut === 'all' || credit.statut === filters.statut) &&
@@ -87,7 +125,7 @@ const CreditsList: React.FC = () => {
   };
 
   const handleStatusUpdate = async (id: number, newStatus: string) => {
-    const datePaiement = newStatus === 'Payé' ? new Date().toISOString().split('T')[0] : undefined;
+    const datePaiement = newStatus === 'Payé' ? new Date().toISOString().split('T')[0] : null;
     
     try {
       const success = await updateCreditStatus(id, newStatus, datePaiement);
@@ -102,17 +140,18 @@ const CreditsList: React.FC = () => {
   const calculateDetailedStats = () => {
     const currentMonthCredits = viewMode === 'mois' ? filteredCredits : getCreditsByMonth(filters.mois);
     const creditsDueIn7Days = getCreditsDueIn7Days();
+    const overdueCredits = getOverdueCredits();
 
     const totalCredits = currentMonthCredits.length;
-    const totalMontant = currentMonthCredits.reduce((sum, credit) => sum + credit.montant_credit, 0);
+    const totalMontant = currentMonthCredits.reduce((sum, credit) => sum + (credit.montant_credit || 0), 0);
     
     const payes = currentMonthCredits.filter(c => c.statut === 'Payé');
     const nonPayes = currentMonthCredits.filter(c => c.statut === 'Non payé');
     const enRetard = currentMonthCredits.filter(c => c.statut === 'En retard');
 
     const montantPaye = payes.reduce((sum, credit) => sum + (credit.paiement || 0), 0);
-    const montantNonPaye = nonPayes.reduce((sum, credit) => sum + credit.montant_credit, 0);
-    const montantEnRetard = enRetard.reduce((sum, credit) => sum + credit.montant_credit, 0);
+    const montantNonPaye = nonPayes.reduce((sum, credit) => sum + (credit.montant_credit || 0), 0);
+    const montantEnRetard = enRetard.reduce((sum, credit) => sum + (credit.montant_credit || 0), 0);
 
     const tauxRecouvrement = totalMontant > 0 ? (montantPaye / totalMontant) * 100 : 0;
 
@@ -127,7 +166,9 @@ const CreditsList: React.FC = () => {
       montantEnRetard,
       tauxRecouvrement,
       creditsDueIn7Days: creditsDueIn7Days.length,
-      montantDueIn7Days: creditsDueIn7Days.reduce((sum, credit) => sum + credit.montant_credit, 0)
+      montantDueIn7Days: creditsDueIn7Days.reduce((sum, credit) => sum + (credit.montant_credit || 0), 0),
+      overdueCredits: overdueCredits.length,
+      montantOverdue: overdueCredits.reduce((sum, credit) => sum + (credit.montant_credit || 0), 0)
     };
   };
 
@@ -154,7 +195,7 @@ const CreditsList: React.FC = () => {
   };
 
   const showDueIn7Days = () => {
-    setFilters(prev => ({ ...prev, statut: 'Non payé' }));
+    setFilters(prev => ({ ...prev, statut: 'all' }));
     setViewMode('tous');
     // Scroll vers la section des échéances
     setTimeout(() => {
@@ -162,9 +203,24 @@ const CreditsList: React.FC = () => {
     }, 100);
   };
 
+  const showOverdueCredits = () => {
+    setFilters(prev => ({ ...prev, statut: 'En retard' }));
+    setViewMode('tous');
+  };
+
   const stats = calculateDetailedStats();
-  const uniqueUsers = [...new Set(credits.map(c => c.cree_par))];
-  const uniqueMonths = [...new Set(credits.map(c => c.created_at.slice(0, 7)))].sort().reverse();
+  const uniqueUsers = [...new Set(credits.map(c => c.cree_par).filter(Boolean))];
+  const uniqueMonths = [...new Set(credits
+    .map(c => c.created_at ? c.created_at.slice(0, 7) : null)
+    .filter(Boolean)
+  )].sort().reverse();
+
+  // Obtenir le nom du mois en français
+  const getMonthName = (monthString: string) => {
+    const [year, month] = monthString.split('-').map(Number);
+    const date = new Date(year, month - 1);
+    return date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  };
 
   if (isLoading) {
     return (
@@ -182,7 +238,7 @@ const CreditsList: React.FC = () => {
           <div className="flex items-center space-x-3">
             <CreditCard className="w-6 h-6 text-blue-600" />
             <h2 className="text-2xl font-bold text-gray-900">
-              {viewMode === 'mois' ? `Crédits du ${filters.mois}` : 'Tous les Crédits'}
+              {viewMode === 'mois' ? `Crédits du ${getMonthName(filters.mois)}` : 'Tous les Crédits'}
             </h2>
           </div>
           <div className="flex space-x-2">
@@ -259,28 +315,44 @@ const CreditsList: React.FC = () => {
           </div>
         </div>
 
-        {/* Taux de Recouvrement */}
-        <div className="bg-gradient-to-r from-cyan-50 to-blue-50 rounded-lg p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <TrendingUp className="w-6 h-6 text-cyan-600" />
-              <div>
-                <h3 className="text-lg font-semibold text-cyan-900">Taux de Recouvrement</h3>
-                <p className="text-cyan-700">Pourcentage du montant total récupéré</p>
+        {/* Taux de Recouvrement et Retards */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <div className="bg-gradient-to-r from-cyan-50 to-blue-50 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <TrendingUp className="w-6 h-6 text-cyan-600" />
+                <div>
+                  <h3 className="text-lg font-semibold text-cyan-900">Taux de Recouvrement</h3>
+                  <p className="text-cyan-700">Pourcentage du montant total récupéré</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-3xl font-bold text-cyan-900">{stats.tauxRecouvrement.toFixed(1)}%</p>
+                <p className="text-cyan-700">
+                  {stats.montantPaye.toLocaleString('fr-FR')} DT / {stats.totalMontant.toLocaleString('fr-FR')} DT
+                </p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-3xl font-bold text-cyan-900">{stats.tauxRecouvrement.toFixed(1)}%</p>
-              <p className="text-cyan-700">
-                {stats.montantPaye.toLocaleString('fr-FR')} DT / {stats.totalMontant.toLocaleString('fr-FR')} DT
-              </p>
+            <div className="mt-3 w-full bg-cyan-200 rounded-full h-2">
+              <div 
+                className="bg-cyan-600 h-2 rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(stats.tauxRecouvrement, 100)}%` }}
+              ></div>
             </div>
           </div>
-          <div className="mt-3 w-full bg-cyan-200 rounded-full h-2">
-            <div 
-              className="bg-cyan-600 h-2 rounded-full transition-all duration-500"
-              style={{ width: `${stats.tauxRecouvrement}%` }}
-            ></div>
+
+          <div 
+            className="bg-red-50 rounded-lg p-4 cursor-pointer hover:bg-red-100 transition-colors"
+            onClick={showOverdueCredits}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-red-600">Crédits en Retard</p>
+                <p className="text-xl font-bold text-red-900">{stats.montantOverdue.toLocaleString('fr-FR')} DT</p>
+                <p className="text-sm text-red-700">{stats.overdueCredits} crédits</p>
+              </div>
+              <XCircle className="w-8 h-8 text-red-600" />
+            </div>
           </div>
         </div>
 
@@ -300,7 +372,7 @@ const CreditsList: React.FC = () => {
               >
                 {uniqueMonths.map(month => (
                   <option key={month} value={month}>
-                    {new Date(month + '-01').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+                    {getMonthName(month)}
                   </option>
                 ))}
               </select>
@@ -378,10 +450,10 @@ const CreditsList: React.FC = () => {
                       <p className="font-semibold text-gray-900">{credit.assure}</p>
                       <p className="text-gray-600">{credit.numero_contrat}</p>
                       <p className="text-yellow-700">
-                        Échéance: {new Date(credit.date_paiement_prevue).toLocaleDateString('fr-FR')}
+                        Échéance: {credit.date_paiement_prevue ? new Date(credit.date_paiement_prevue).toLocaleDateString('fr-FR') : 'Non définie'}
                       </p>
                     </div>
-                    <span className="font-bold text-yellow-800">{credit.montant_credit.toLocaleString('fr-FR')} DT</span>
+                    <span className="font-bold text-yellow-800">{(credit.montant_credit || 0).toLocaleString('fr-FR')} DT</span>
                   </div>
                 </div>
               ))}
@@ -452,19 +524,19 @@ const CreditsList: React.FC = () => {
                     {credit.branche}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {credit.prime.toLocaleString('fr-FR')}
+                    {(credit.prime || 0).toLocaleString('fr-FR')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                    {credit.montant_credit.toLocaleString('fr-FR')}
+                    {(credit.montant_credit || 0).toLocaleString('fr-FR')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {(credit.paiement || 0).toLocaleString('fr-FR')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <span className={`font-semibold ${
-                      credit.solde >= 0 ? 'text-green-600' : 'text-red-600'
+                      (credit.solde || 0) >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {credit.solde?.toLocaleString('fr-FR') || '0'}
+                      {(credit.solde || 0).toLocaleString('fr-FR')}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
